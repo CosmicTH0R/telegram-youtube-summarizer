@@ -308,3 +308,62 @@ describe('Summarizer', () => {
     });
   });
 });
+
+  describe('Error Handling Property Tests', () => {
+    /**
+     * Feature: telegram-youtube-summarizer
+     * Property 18: Long video warning
+     * Validates: Requirements 8.2
+     */
+    test('Property 18: Long video warning', () => {
+      fc.assert(
+        fc.property(
+          fc.integer({ min: 10801, max: 50000 }), // Videos longer than 3 hours
+          (duration: number) => {
+            const transcript: Transcript = {
+              video_id: 'test123',
+              title: 'Long Video',
+              text: 'Test transcript',
+              language: 'en',
+              duration,
+              fetched_at: new Date(),
+            };
+
+            // Property: Videos longer than 3 hours should be identified as long
+            expect(summarizer.isLongVideo(transcript)).toBe(true);
+
+            // Property: Videos 3 hours or less should not be identified as long
+            const shortTranscript = { ...transcript, duration: 10800 };
+            expect(summarizer.isLongVideo(shortTranscript)).toBe(false);
+          }
+        ),
+        { numRuns: 100 }
+      );
+    });
+
+    /**
+     * Property: Short videos should not trigger long video warning
+     */
+    test('should not identify short videos as long', () => {
+      fc.assert(
+        fc.property(
+          fc.integer({ min: 60, max: 10800 }), // Videos up to 3 hours
+          (duration: number) => {
+            const transcript: Transcript = {
+              video_id: 'test123',
+              title: 'Short Video',
+              text: 'Test transcript',
+              language: 'en',
+              duration,
+              fetched_at: new Date(),
+            };
+
+            // Property: Videos 3 hours or less should not be long
+            expect(summarizer.isLongVideo(transcript)).toBe(false);
+          }
+        ),
+        { numRuns: 100 }
+      );
+    });
+  });
+});

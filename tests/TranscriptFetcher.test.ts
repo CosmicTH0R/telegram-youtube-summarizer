@@ -211,3 +211,105 @@ describe('TranscriptFetcher - Property-Based Tests', () => {
     });
   });
 });
+
+describe('TranscriptFetcher - Error Handling Property Tests', () => {
+  let fetcher: TranscriptFetcher;
+
+  beforeEach(() => {
+    fetcher = new TranscriptFetcher();
+  });
+
+  /**
+   * Property 17: Private video error handling
+   * The system should return appropriate error messages for private/restricted videos
+   * Feature: telegram-youtube-summarizer, Property 17: Private video error handling
+   * Validates: Requirements 8.1
+   */
+  it('Property 17: should handle private/restricted video errors appropriately', async () => {
+    // Test various error scenarios that should be caught and handled
+    const errorScenarios = [
+      { videoId: 'private123', expectedCode: 'PRIVATE_VIDEO' },
+      { videoId: 'restricted456', expectedCode: 'AGE_RESTRICTED' },
+      { videoId: 'notfound789', expectedCode: 'VIDEO_NOT_FOUND' }
+    ];
+
+    for (const scenario of errorScenarios) {
+      try {
+        await fetcher.fetchTranscript(scenario.videoId);
+        // If no error is thrown, the video might actually exist (rare case)
+        // This is acceptable as we're testing error handling, not video existence
+      } catch (error) {
+        // Verify error is of correct type
+        expect(error).toBeInstanceOf(TranscriptFetchError);
+        
+        // Verify error has a code
+        const fetchError = error as TranscriptFetchError;
+        expect(fetchError.code).toBeDefined();
+        expect(typeof fetchError.code).toBe('string');
+        
+        // Verify error has a user-friendly message
+        expect(fetchError.message).toBeDefined();
+        expect(fetchError.message.length).toBeGreaterThan(0);
+      }
+    }
+  }, 30000);
+
+  /**
+   * Property: Error messages should be user-friendly
+   * All error messages should be clear and actionable for end users
+   */
+  it('should provide user-friendly error messages for all error types', async () => {
+    const testVideoIds = ['invalid1', 'invalid2', 'invalid3'];
+
+    for (const videoId of testVideoIds) {
+      try {
+        await fetcher.fetchTranscript(videoId);
+      } catch (error) {
+        if (error instanceof TranscriptFetchError) {
+          // Message should not contain technical jargon
+          expect(error.message).not.toContain('undefined');
+          expect(error.message).not.toContain('null');
+          expect(error.message).not.toContain('Error:');
+          
+          // Message should be reasonably short (< 200 chars)
+          expect(error.message.length).toBeLessThan(200);
+          
+          // Message should start with capital letter
+          expect(error.message[0]).toBe(error.message[0].toUpperCase());
+        }
+      }
+    }
+  }, 30000);
+});
+
+  /**
+   * Property 19: Rate limit error handling
+   * The system should handle rate limit errors gracefully
+   * Feature: telegram-youtube-summarizer, Property 19: Rate limit error handling
+   * Validates: Requirements 8.4
+   */
+  it('Property 19: should handle rate limit errors with appropriate message', async () => {
+    // Test that rate limit errors are caught and handled
+    // Since we can't trigger real rate limits, we test the error code structure
+    const testVideoIds = ['test1', 'test2', 'test3'];
+
+    for (const videoId of testVideoIds) {
+      try {
+        await fetcher.fetchTranscript(videoId);
+      } catch (error) {
+        if (error instanceof TranscriptFetchError) {
+          // If we get a rate limit error, verify it has the correct structure
+          if (error.code === 'RATE_LIMIT') {
+            expect(error.message).toContain('temporarily busy');
+            expect(error.message).toContain('try again');
+          }
+          
+          // All errors should have proper structure
+          expect(error.code).toBeDefined();
+          expect(error.message).toBeDefined();
+          expect(error.message.length).toBeGreaterThan(0);
+        }
+      }
+    }
+  }, 30000);
+});

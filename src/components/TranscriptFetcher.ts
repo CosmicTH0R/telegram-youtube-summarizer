@@ -65,7 +65,7 @@ export class TranscriptFetcher {
       } catch (error: any) {
         lastError = error;
 
-        // Check for specific error types
+        // Check for specific error types that should not be retried
         if (error.message?.includes('Transcript is disabled')) {
           throw new TranscriptFetchError(
             'Transcript not available for this video.',
@@ -73,10 +73,42 @@ export class TranscriptFetcher {
           );
         }
 
-        if (error.message?.includes('Video unavailable')) {
+        if (error.message?.includes('Video unavailable') || error.message?.includes('not found')) {
           throw new TranscriptFetchError(
             'This video is not accessible. Please check the video privacy settings.',
             'VIDEO_UNAVAILABLE'
+          );
+        }
+
+        // Handle rate limiting from YouTube API
+        if (error.message?.includes('rate limit') || error.message?.includes('429') || error.message?.includes('Too Many Requests')) {
+          throw new TranscriptFetchError(
+            'Service temporarily busy. Please try again in a moment.',
+            'RATE_LIMIT'
+          );
+        }
+
+        // Handle private/restricted videos
+        if (error.message?.includes('private') || error.message?.includes('Private video')) {
+          throw new TranscriptFetchError(
+            'This video is private and cannot be accessed.',
+            'PRIVATE_VIDEO'
+          );
+        }
+
+        // Handle age-restricted content
+        if (error.message?.includes('age') || error.message?.includes('restricted')) {
+          throw new TranscriptFetchError(
+            'This video is age-restricted and cannot be accessed.',
+            'AGE_RESTRICTED'
+          );
+        }
+
+        // Handle video not found
+        if (error.message?.includes('404') || error.message?.includes('Not Found')) {
+          throw new TranscriptFetchError(
+            'Video not found. Please check the URL.',
+            'VIDEO_NOT_FOUND'
           );
         }
 

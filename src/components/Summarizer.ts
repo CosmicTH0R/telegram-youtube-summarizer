@@ -3,8 +3,16 @@ import { Transcript, Summary } from '../models';
 import { logger } from '../utils/logger';
 import { config } from '../config';
 
+export class SummaryGenerationError extends Error {
+  constructor(message: string, public code: string) {
+    super(message);
+    this.name = 'SummaryGenerationError';
+  }
+}
+
 export class Summarizer {
   private openai: OpenAI;
+  private readonly LONG_VIDEO_THRESHOLD = 10800; // 3 hours in seconds
 
   constructor() {
     this.openai = new OpenAI({
@@ -14,6 +22,17 @@ export class Summarizer {
 
   async generateSummary(transcript: Transcript, language: string = 'en'): Promise<Summary> {
     logger.info('Generating summary', { videoId: transcript.video_id, language });
+
+    // Check for long videos and log warning
+    if (transcript.duration > this.LONG_VIDEO_THRESHOLD) {
+      const hours = Math.floor(transcript.duration / 3600);
+      const minutes = Math.floor((transcript.duration % 3600) / 60);
+      logger.warning('Processing long video', {
+        videoId: transcript.video_id,
+        duration: transcript.duration,
+        formattedDuration: `${hours}h ${minutes}m`,
+      });
+    }
 
     try {
       const prompt = this.buildPrompt(transcript, language);
@@ -65,10 +84,47 @@ export class Summarizer {
 
       logger.info('Summary generated successfully', { videoId: transcript.video_id });
       return summary;
-    } catch (error) {
+    } catch (error: any) {
       logger.error('Failed to generate summary', error as Error, { videoId: transcript.video_id });
-      throw error;
+      
+      // Handle specific OpenAI errors
+      if (error.code === 'rate_limit_exceeded') {
+        throw new SummaryGenerationError(
+          'Service temporarily busy. Please try again in a moment.',
+          'RATE_LIMIT'
+        );
+      }
+
+      if (error.code === 'context_length_exceeded') {
+        throw new SummaryGenerationError(
+          'This video is too long to summarize. Please try a shorter video.',
+          'CONTEXT_TOO_LONG'
+        );
+      }
+
+      // Handle JSON parsing errors
+      if (error instanceof SyntaxError) {
+        throw new SummaryGenerationError(
+          'Failed to generate summary. Please try again.',
+          'PARSE_ERROR'
+        );
+      }
+
+      // Generic error
+      throw new SummaryGenerationError(
+        'An error occurred while generating the summary. Please try again later.',
+        'GENERATION_FAILED'
+      );
     }
+  }
+
+  /**
+   * Checks if a video is considered long (>3 hours)
+   * @param transcript - Transcript object
+   * @returns true if video exceeds 3 hours
+   */
+  isLongVideo(transcript: Transcript): boolean {
+    return transcript.duration > this.LONG_VIDEO_THRESHOLD;
   }
 
   private buildPrompt(transcript: Transcript, language: string): string {
