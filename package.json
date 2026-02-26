@@ -21,20 +21,21 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "node-telegram-bot-api": "^0.66.0",
-    "youtube-transcript": "^1.2.1",
-    "openai": "^4.28.0",
+    "@google/generative-ai": "^0.24.1",
+    "async-mutex": "^0.5.0",
     "dotenv": "^16.4.5",
-    "async-mutex": "^0.5.0"
+    "node-telegram-bot-api": "^0.66.0",
+    "openai": "^4.28.0",
+    "youtube-transcript": "^1.2.1"
   },
   "devDependencies": {
+    "@types/jest": "^29.5.12",
     "@types/node": "^20.11.19",
     "@types/node-telegram-bot-api": "^0.64.3",
-    "@types/jest": "^29.5.12",
-    "typescript": "^5.3.3",
-    "ts-node": "^10.9.2",
+    "fast-check": "^3.15.1",
     "jest": "^29.7.0",
     "ts-jest": "^29.1.2",
-    "fast-check": "^3.15.1"
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
   }
 }

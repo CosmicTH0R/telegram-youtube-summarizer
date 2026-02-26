@@ -7,6 +7,10 @@ export const config = {
   telegram: {
     botToken: process.env.TELEGRAM_BOT_TOKEN || '',
   },
+  gemini: {
+    apiKey: process.env.GEMINI_API_KEY || '',
+    model: process.env.GEMINI_MODEL || 'gemini-1.5-flash',
+  },
   openai: {
     apiKey: process.env.OPENAI_API_KEY || '',
     model: process.env.OPENAI_MODEL || 'gpt-4-turbo-preview',
@@ -48,8 +52,9 @@ export function validateConfig(): void {
     errors.push('TELEGRAM_BOT_TOKEN is required');
   }
 
-  if (!config.openai.apiKey) {
-    errors.push('OPENAI_API_KEY is required');
+  // At least one AI provider must be configured
+  if (!config.gemini.apiKey && !config.openai.apiKey) {
+    errors.push('Either GEMINI_API_KEY or OPENAI_API_KEY is required');
   }
 
   if (errors.length > 0) {

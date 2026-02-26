@@ -34,6 +34,9 @@ export interface QAPair {
   timestamp: Date;
 }
 
+// Alias for convenience
+export type QA = QAPair;
+
 export interface Session {
   user_id: string;
   video_id: string;
