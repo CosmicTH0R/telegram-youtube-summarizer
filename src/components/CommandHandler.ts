@@ -1,12 +1,17 @@
 import { ContextManager } from './ContextManager';
 import { Summarizer } from './Summarizer';
 import { logger } from '../utils/logger';
+import { getAIProvider, AIProvider } from '../utils/aiProvider';
 
 export class CommandHandler {
+  private aiProvider: AIProvider;
+
   constructor(
     private contextManager: ContextManager,
     private summarizer: Summarizer
-  ) {}
+  ) {
+    this.aiProvider = getAIProvider();
+  }
 
   /**
    * Handle /summary command
@@ -109,9 +114,8 @@ Example: "Summarize in Hindi" or "हिंदी में बताओ"
     transcript: string,
     language: string
   ): Promise<string[]> {
-    const openai = this.summarizer['openai']; // Access private field
-
-    const prompt = `Extract actionable items from this video transcript. Return a JSON array of strings, each representing a concrete action or recommendation.
+    const systemPrompt = 'You are a helpful assistant that extracts actionable items from video transcripts. Always respond with valid JSON.';
+    const userPrompt = `Extract actionable items from this video transcript. Return a JSON array of strings, each representing a concrete action or recommendation.
 
 Rules:
 - Each action should be specific and implementable
@@ -125,20 +129,13 @@ ${transcript.substring(0, 8000)}
 
 Return only valid JSON array of strings.`;
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3,
-      max_tokens: 1000,
-    });
-
-    const content = response.choices[0].message.content || '[]';
+    const response = await this.aiProvider.generateCompletion(systemPrompt, userPrompt, 0.3);
     
     try {
-      const actionPoints = JSON.parse(content);
+      const actionPoints = JSON.parse(response.content);
       return Array.isArray(actionPoints) ? actionPoints : [];
     } catch {
-      logger.info('Failed to parse action points JSON', { content });
+      logger.info('Failed to parse action points JSON', { content: response.content });
       return [];
     }
   }

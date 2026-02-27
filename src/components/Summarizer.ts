@@ -1,7 +1,7 @@
-import OpenAI from 'openai';
 import { Transcript, Summary } from '../models';
 import { logger } from '../utils/logger';
 import { config } from '../config';
+import { getAIProvider, AIProvider } from '../utils/aiProvider';
 
 export class SummaryGenerationError extends Error {
   constructor(message: string, public code: string) {
@@ -11,13 +11,11 @@ export class SummaryGenerationError extends Error {
 }
 
 export class Summarizer {
-  private openai: OpenAI;
+  private aiProvider: AIProvider;
   private readonly LONG_VIDEO_THRESHOLD = 10800; // 3 hours in seconds
 
   constructor() {
-    this.openai = new OpenAI({
-      apiKey: config.openai.apiKey,
-    });
+    this.aiProvider = getAIProvider();
   }
 
   async generateSummary(transcript: Transcript, language: string = 'en'): Promise<Summary> {
@@ -35,30 +33,11 @@ export class Summarizer {
     }
 
     try {
-      const prompt = this.buildPrompt(transcript, language);
+      const systemPrompt = 'You are a helpful assistant that creates structured summaries of video transcripts. Always respond with valid JSON.';
+      const userPrompt = this.buildPrompt(transcript, language);
       
-      const response = await this.openai.chat.completions.create({
-        model: 'gpt-4',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a helpful assistant that creates structured summaries of video transcripts. Always respond with valid JSON.',
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        temperature: 0.3,
-        response_format: { type: 'json_object' },
-      });
-
-      const content = response.choices[0].message.content;
-      if (!content) {
-        throw new Error('Empty response from OpenAI');
-      }
-
-      const parsed = JSON.parse(content);
+      const response = await this.aiProvider.generateCompletion(systemPrompt, userPrompt, 0.3);
+      const parsed = JSON.parse(response.content);
       
       const summary: Summary = {
         title: transcript.title,

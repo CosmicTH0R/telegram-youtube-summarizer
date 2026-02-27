@@ -2,17 +2,12 @@ import { LanguageProcessor } from '../src/components/LanguageProcessor';
 import { Summary } from '../src/models';
 import * as fc from 'fast-check';
 
-// Mock OpenAI
-const mockCreate = jest.fn();
-jest.mock('openai', () => {
+// Mock AI Provider
+const mockGenerateCompletion = jest.fn();
+jest.mock('../src/utils/aiProvider', () => {
   return {
-    __esModule: true,
-    default: jest.fn().mockImplementation(() => ({
-      chat: {
-        completions: {
-          create: mockCreate,
-        },
-      },
+    getAIProvider: jest.fn(() => ({
+      generateCompletion: mockGenerateCompletion,
     })),
   };
 });
@@ -22,7 +17,7 @@ describe('LanguageProcessor', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockCreate.mockReset();
+    mockGenerateCompletion.mockReset();
     languageProcessor = new LanguageProcessor();
   });
 
@@ -109,18 +104,18 @@ describe('LanguageProcessor', () => {
         };
 
         // Mock translation responses
-        mockCreate
+        mockGenerateCompletion
           .mockResolvedValueOnce({
-            choices: [{ message: { content: 'बिंदु 1\nबिंदु 2\nबिंदु 3\nबिंदु 4\nबिंदु 5' } }],
+            content: JSON.stringify({ translation: 'बिंदु 1\nबिंदु 2\nबिंदु 3\nबिंदु 4\nबिंदु 5' }),
           })
           .mockResolvedValueOnce({
-            choices: [{ message: { content: 'परिचय\nमुख्य\nअंत' } }],
+            content: JSON.stringify({ translation: 'परिचय\nमुख्य\nअंत' }),
           })
           .mockResolvedValueOnce({
-            choices: [{ message: { content: 'मुख्य निष्कर्ष' } }],
+            content: JSON.stringify({ translation: 'मुख्य निष्कर्ष' }),
           })
           .mockResolvedValueOnce({
-            choices: [{ message: { content: 'परीक्षण वीडियो' } }],
+            content: JSON.stringify({ translation: 'परीक्षण वीडियो' }),
           });
 
         const result = await languageProcessor.translateSummary(summary, 'hi');
@@ -140,7 +135,7 @@ describe('LanguageProcessor', () => {
           core_takeaway: 'Main takeaway',
         };
 
-        mockCreate.mockRejectedValue(new Error('Translation API Error'));
+        mockGenerateCompletion.mockRejectedValue(new Error('Translation API Error'));
 
         await expect(languageProcessor.translateSummary(summary, 'hi')).rejects.toThrow(
           'Translation API Error'
@@ -158,19 +153,19 @@ describe('LanguageProcessor', () => {
       test('should translate answer to target language', async () => {
         const answer = 'This is the answer';
 
-        mockCreate.mockResolvedValue({
-          choices: [{ message: { content: 'यह उत्तर है' } }],
+        mockGenerateCompletion.mockResolvedValue({
+          content: JSON.stringify({ translation: 'यह उत्तर है' }),
         });
 
         const result = await languageProcessor.translateAnswer(answer, 'hi');
         expect(result).toBe('यह उत्तर है');
-        expect(mockCreate).toHaveBeenCalled();
+        expect(mockGenerateCompletion).toHaveBeenCalled();
       });
 
       test('should handle translation errors', async () => {
         const answer = 'This is the answer';
 
-        mockCreate.mockRejectedValue(new Error('Translation API Error'));
+        mockGenerateCompletion.mockRejectedValue(new Error('Translation API Error'));
 
         await expect(languageProcessor.translateAnswer(answer, 'hi')).rejects.toThrow(
           'Translation API Error'
@@ -245,9 +240,9 @@ describe('LanguageProcessor', () => {
           fc.string({ minLength: 5, maxLength: 100 }),
           fc.constantFrom('hi', 'ta', 'te', 'kn', 'mr'),
           async (text: string, targetLanguage: string) => {
-            mockCreate.mockReset();
-            mockCreate.mockResolvedValue({
-              choices: [{ message: { content: 'Translated text' } }],
+            mockGenerateCompletion.mockReset();
+            mockGenerateCompletion.mockResolvedValue({
+              content: JSON.stringify({ translation: 'Translated text' }),
             });
 
             const result = await languageProcessor.translateAnswer(text, targetLanguage);
@@ -256,12 +251,12 @@ describe('LanguageProcessor', () => {
             expect(typeof result).toBe('string');
             expect(result.length).toBeGreaterThan(0);
 
-            // Property: OpenAI should be called with correct language
-            expect(mockCreate).toHaveBeenCalled();
-            const callArgs = mockCreate.mock.calls[0][0];
-            const prompt = callArgs.messages[1].content;
+            // Property: AI provider should be called with correct language
+            expect(mockGenerateCompletion).toHaveBeenCalled();
+            const callArgs = mockGenerateCompletion.mock.calls[0];
+            const userPrompt = callArgs[1];
             const languageName = languageProcessor.getLanguageName(targetLanguage);
-            expect(prompt).toContain(languageName);
+            expect(userPrompt).toContain(languageName);
           }
         ),
         { numRuns: 50 }
@@ -284,8 +279,8 @@ describe('LanguageProcessor', () => {
             // Property: Should return original text for English
             expect(result).toBe(text);
 
-            // Property: OpenAI should not be called for English
-            expect(mockCreate).not.toHaveBeenCalled();
+            // Property: AI provider should not be called for English
+            expect(mockGenerateCompletion).not.toHaveBeenCalled();
           }
         ),
         { numRuns: 100 }
@@ -333,19 +328,19 @@ describe('LanguageProcessor', () => {
           }),
           fc.constantFrom('hi', 'ta'),
           async (summary: Summary, targetLanguage: string) => {
-            mockCreate.mockReset();
-            mockCreate
+            mockGenerateCompletion.mockReset();
+            mockGenerateCompletion
               .mockResolvedValueOnce({
-                choices: [{ message: { content: 'T1\nT2\nT3\nT4\nT5' } }],
+                content: JSON.stringify({ translation: 'T1\nT2\nT3\nT4\nT5' }),
               })
               .mockResolvedValueOnce({
-                choices: [{ message: { content: 'D1\nD2\nD3' } }],
+                content: JSON.stringify({ translation: 'D1\nD2\nD3' }),
               })
               .mockResolvedValueOnce({
-                choices: [{ message: { content: 'Translated takeaway' } }],
+                content: JSON.stringify({ translation: 'Translated takeaway' }),
               })
               .mockResolvedValueOnce({
-                choices: [{ message: { content: 'Translated title' } }],
+                content: JSON.stringify({ translation: 'Translated title' }),
               });
 
             const result = await languageProcessor.translateSummary(summary, targetLanguage);

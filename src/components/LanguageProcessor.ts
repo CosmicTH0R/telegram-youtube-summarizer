@@ -1,10 +1,10 @@
-import OpenAI from 'openai';
 import { Summary } from '../models';
 import { logger } from '../utils/logger';
 import { config } from '../config';
+import { getAIProvider, AIProvider } from '../utils/aiProvider';
 
 export class LanguageProcessor {
-  private openai: OpenAI;
+  private aiProvider: AIProvider;
 
   // Language detection patterns
   private languagePatterns: Record<string, RegExp[]> = {
@@ -50,9 +50,7 @@ export class LanguageProcessor {
   };
 
   constructor() {
-    this.openai = new OpenAI({
-      apiKey: config.openai.apiKey,
-    });
+    this.aiProvider = getAIProvider();
   }
 
   detectLanguageRequest(message: string): string | null {
@@ -132,30 +130,26 @@ export class LanguageProcessor {
   private async translate(text: string, targetLanguage: string): Promise<string> {
     const languageName = this.languageNames[targetLanguage] || targetLanguage;
 
-    const prompt = `Translate the following text to ${languageName}. Maintain the structure and formatting:
+    const systemPrompt = 'You are a professional translator. Translate accurately while preserving formatting. Respond with JSON format: {"translation": "translated text"}';
+    const userPrompt = `Translate the following text to ${languageName}. Maintain the structure and formatting:
 
 ${text}
 
-Provide only the translation, no explanations.`;
+Provide only the translation in JSON format.`;
 
-    const response = await this.openai.chat.completions.create({
-      model: 'gpt-4',
-      messages: [
-        {
-          role: 'system',
-          content: 'You are a professional translator. Translate accurately while preserving formatting.',
-        },
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-      temperature: 0.3,
-      max_tokens: 1000,
-    });
-
-    const translated = response.choices[0].message.content || text;
-    return translated.trim();
+    const response = await this.aiProvider.generateCompletion(systemPrompt, userPrompt, 0.3);
+    
+    // Parse response
+    let translated: string;
+    try {
+      const parsed = JSON.parse(response.content);
+      translated = parsed.translation || response.content;
+    } catch {
+      // If not JSON, use the content directly
+      translated = response.content;
+    }
+    
+    return translated.trim() || text;
   }
 
   getSupportedLanguages(): string[] {

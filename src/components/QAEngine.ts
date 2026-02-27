@@ -1,7 +1,7 @@
-import OpenAI from 'openai';
 import { Transcript, QA } from '../models';
 import { logger } from '../utils/logger';
 import { config } from '../config';
+import { getAIProvider, AIProvider } from '../utils/aiProvider';
 
 interface Chunk {
   text: string;
@@ -10,12 +10,10 @@ interface Chunk {
 }
 
 export class QAEngine {
-  private openai: OpenAI;
+  private aiProvider: AIProvider;
 
   constructor() {
-    this.openai = new OpenAI({
-      apiKey: config.openai.apiKey,
-    });
+    this.aiProvider = getAIProvider();
   }
 
   async answerQuestion(
@@ -41,26 +39,25 @@ export class QAEngine {
       const context = relevantChunks.map((chunk) => chunk.text).join('\n\n');
       
       // Build prompt
-      const prompt = this.buildPrompt(question, context, history);
+      const userPrompt = this.buildPrompt(question, context, history);
+      const systemPrompt = 'You are a helpful assistant that answers questions based on video transcripts. Only use information from the provided context.';
       
-      // Get answer from OpenAI
-      const response = await this.openai.chat.completions.create({
-        model: 'gpt-4',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a helpful assistant that answers questions based on video transcripts. Only use information from the provided context.',
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        temperature: 0.3,
-        max_tokens: 500,
-      });
-
-      const answer = response.choices[0].message.content || 'This topic is not covered in the video.';
+      // Get answer from AI provider
+      const response = await this.aiProvider.generateCompletion(systemPrompt, userPrompt, 0.3);
+      
+      // Parse response - it should be JSON with an "answer" field
+      let answer: string;
+      try {
+        const parsed = JSON.parse(response.content);
+        answer = parsed.answer || response.content;
+      } catch {
+        // If not JSON, use the content directly
+        answer = response.content;
+      }
+      
+      if (!answer || answer.trim() === '') {
+        answer = 'This topic is not covered in the video.';
+      }
       
       logger.info('Question answered', { videoId: transcript.video_id });
       return answer;
@@ -189,7 +186,8 @@ export class QAEngine {
 
     prompt += `User question: ${question}\n\n`;
     prompt += 'Answer the question based ONLY on the provided context. ';
-    prompt += 'If the information is not in the context, respond with "This topic is not covered in the video."';
+    prompt += 'If the information is not in the context, respond with "This topic is not covered in the video."\n\n';
+    prompt += 'Respond with JSON format: {"answer": "your answer here"}';
 
     return prompt;
   }

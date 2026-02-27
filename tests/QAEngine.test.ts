@@ -2,17 +2,12 @@ import { QAEngine } from '../src/components/QAEngine';
 import { Transcript, QA } from '../src/models';
 import * as fc from 'fast-check';
 
-// Mock OpenAI
-const mockCreate = jest.fn();
-jest.mock('openai', () => {
+// Mock AI Provider
+const mockGenerateCompletion = jest.fn();
+jest.mock('../src/utils/aiProvider', () => {
   return {
-    __esModule: true,
-    default: jest.fn().mockImplementation(() => ({
-      chat: {
-        completions: {
-          create: mockCreate,
-        },
-      },
+    getAIProvider: jest.fn(() => ({
+      generateCompletion: mockGenerateCompletion,
     })),
   };
 });
@@ -22,7 +17,7 @@ describe('QAEngine', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockCreate.mockReset();
+    mockGenerateCompletion.mockReset();
     qaEngine = new QAEngine();
   });
 
@@ -80,20 +75,14 @@ describe('QAEngine', () => {
         fetched_at: new Date(),
       };
 
-      mockCreate.mockResolvedValue({
-        choices: [
-          {
-            message: {
-              content: 'Machine learning is a subset of artificial intelligence.',
-            },
-          },
-        ],
+      mockGenerateCompletion.mockResolvedValue({
+        content: JSON.stringify({ answer: 'Machine learning is a subset of artificial intelligence.' }),
       });
 
       const answer = await qaEngine.answerQuestion('What is machine learning?', transcript);
 
       expect(answer).toBeTruthy();
-      expect(mockCreate).toHaveBeenCalled();
+      expect(mockGenerateCompletion).toHaveBeenCalled();
     });
 
     test('should return "not covered" when no relevant chunks', async () => {
@@ -129,26 +118,20 @@ describe('QAEngine', () => {
         },
       ];
 
-      mockCreate.mockResolvedValue({
-        choices: [
-          {
-            message: {
-              content: 'Deep learning is a type of machine learning.',
-            },
-          },
-        ],
+      mockGenerateCompletion.mockResolvedValue({
+        content: JSON.stringify({ answer: 'Deep learning is a type of machine learning.' }),
       });
 
       const answer = await qaEngine.answerQuestion('What is deep learning?', transcript, history);
 
       expect(answer).toBeTruthy();
-      expect(mockCreate).toHaveBeenCalled();
+      expect(mockGenerateCompletion).toHaveBeenCalled();
       
       // Check that history was included in the prompt
-      const callArgs = mockCreate.mock.calls[0][0];
-      const prompt = callArgs.messages[1].content;
-      expect(prompt).toContain('Previous conversation');
-      expect(prompt).toContain('What is machine learning?');
+      const callArgs = mockGenerateCompletion.mock.calls[0];
+      const userPrompt = callArgs[1];
+      expect(userPrompt).toContain('Previous conversation');
+      expect(userPrompt).toContain('What is machine learning?');
     });
 
     test('should limit history to last 5 Q&A pairs', async () => {
@@ -169,19 +152,19 @@ describe('QAEngine', () => {
           timestamp: new Date(),
         }));
 
-      mockCreate.mockResolvedValue({
-        choices: [{ message: { content: 'Test answer' } }],
+      mockGenerateCompletion.mockResolvedValue({
+        content: JSON.stringify({ answer: 'Test answer' }),
       });
 
       await qaEngine.answerQuestion('machine learning', transcript, history);
 
-      expect(mockCreate).toHaveBeenCalled();
-      const callArgs = mockCreate.mock.calls[0][0];
-      const prompt = callArgs.messages[1].content;
+      expect(mockGenerateCompletion).toHaveBeenCalled();
+      const callArgs = mockGenerateCompletion.mock.calls[0];
+      const userPrompt = callArgs[1];
       
       // Should only include last 5 pairs
-      expect(prompt).toContain('Question 5');
-      expect(prompt).not.toContain('Question 0');
+      expect(userPrompt).toContain('Question 5');
+      expect(userPrompt).not.toContain('Question 0');
     });
 
     test('should handle API errors', async () => {
@@ -194,7 +177,7 @@ describe('QAEngine', () => {
         fetched_at: new Date(),
       };
 
-      mockCreate.mockRejectedValue(new Error('API Error'));
+      mockGenerateCompletion.mockRejectedValue(new Error('API Error'));
 
       await expect(qaEngine.answerQuestion('machine learning', transcript)).rejects.toThrow('API Error');
     });
@@ -220,9 +203,9 @@ describe('QAEngine', () => {
           fc.string({ minLength: 5, maxLength: 100 }),
           async (transcript: Transcript, question: string) => {
             // Mock response for unanswerable questions
-            mockCreate.mockReset();
-            mockCreate.mockResolvedValue({
-              choices: [{ message: { content: 'This topic is not covered in the video.' } }],
+            mockGenerateCompletion.mockReset();
+            mockGenerateCompletion.mockResolvedValue({
+              content: JSON.stringify({ answer: 'This topic is not covered in the video.' }),
             });
 
             const answer = await qaEngine.answerQuestion(question, transcript);
@@ -230,11 +213,6 @@ describe('QAEngine', () => {
             // Property: Answer must be a non-empty string
             expect(typeof answer).toBe('string');
             expect(answer.length).toBeGreaterThan(0);
-
-            // Property: If no relevant context, should return standard message
-            if (answer === 'This topic is not covered in the video.') {
-              expect(answer).toBe('This topic is not covered in the video.');
-            }
           }
         ),
         { numRuns: 50 }
