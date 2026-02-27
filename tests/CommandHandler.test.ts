@@ -3,28 +3,12 @@ import { ContextManager } from '../src/components/ContextManager';
 import { Summarizer } from '../src/components/Summarizer';
 import * as fc from 'fast-check';
 
-// Mock OpenAI
-jest.mock('openai', () => {
+// Mock AI Provider
+const mockGenerateCompletion = jest.fn();
+jest.mock('../src/utils/aiProvider', () => {
   return {
-    __esModule: true,
-    default: jest.fn().mockImplementation(() => ({
-      chat: {
-        completions: {
-          create: jest.fn().mockResolvedValue({
-            choices: [
-              {
-                message: {
-                  content: JSON.stringify({
-                    key_points: ['Point 1', 'Point 2', 'Point 3', 'Point 4', 'Point 5'],
-                    timestamps: ['0:00 - Intro', '5:30 - Main topic', '10:00 - Conclusion'],
-                    core_takeaway: 'This is the main takeaway',
-                  }),
-                },
-              },
-            ],
-          }),
-        },
-      },
+    getAIProvider: jest.fn(() => ({
+      generateCompletion: mockGenerateCompletion,
     })),
   };
 });
@@ -44,6 +28,18 @@ describe('CommandHandler', () => {
   });
 
   beforeEach(() => {
+    jest.clearAllMocks();
+    mockGenerateCompletion.mockReset();
+    
+    // Default mock for summary generation
+    mockGenerateCompletion.mockResolvedValue({
+      content: JSON.stringify({
+        key_points: ['Point 1', 'Point 2', 'Point 3', 'Point 4', 'Point 5'],
+        timestamps: ['0:00 - Intro', '5:30 - Main topic', '10:00 - Conclusion'],
+        core_takeaway: 'This is the main takeaway',
+      }),
+    });
+    
     contextManager = new ContextManager();
     summarizer = new Summarizer();
     commandHandler = new CommandHandler(contextManager, summarizer);
@@ -76,19 +72,12 @@ describe('CommandHandler', () => {
 
       test('should return action points for active session', async () => {
         // Mock action points response
-        const mockOpenAI = (summarizer as any).openai;
-        mockOpenAI.chat.completions.create.mockResolvedValueOnce({
-          choices: [
-            {
-              message: {
-                content: JSON.stringify([
-                  'Action 1: Do this',
-                  'Action 2: Do that',
-                  'Action 3: Try this',
-                ]),
-              },
-            },
-          ],
+        mockGenerateCompletion.mockResolvedValueOnce({
+          content: JSON.stringify([
+            'Action 1: Do this',
+            'Action 2: Do that',
+            'Action 3: Try this',
+          ]),
         });
 
         await contextManager.createSession('user123', 'video123', createMockTranscript());
@@ -101,15 +90,8 @@ describe('CommandHandler', () => {
 
       test('should handle empty action points', async () => {
         // Mock empty action points
-        const mockOpenAI = (summarizer as any).openai;
-        mockOpenAI.chat.completions.create.mockResolvedValueOnce({
-          choices: [
-            {
-              message: {
-                content: JSON.stringify([]),
-              },
-            },
-          ],
+        mockGenerateCompletion.mockResolvedValueOnce({
+          content: JSON.stringify([]),
         });
 
         await contextManager.createSession('user123', 'video123', createMockTranscript());
