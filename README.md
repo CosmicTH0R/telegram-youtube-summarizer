@@ -27,7 +27,7 @@ An intelligent Telegram bot that helps users quickly understand YouTube videos b
 - **Bot Framework**: OpenClaw
 - **Telegram Integration**: node-telegram-bot-api
 - **Transcript Retrieval**: youtube-transcript
-- **LLM**: OpenAI GPT-4/GPT-3.5-turbo
+- **LLM**: OpenAI GPT-4/GPT-3.5-turbo OR Google Gemini (with automatic fallback)
 - **Language**: TypeScript
 - **Testing**: Jest + fast-check (property-based testing)
 
@@ -37,7 +37,7 @@ An intelligent Telegram bot that helps users quickly understand YouTube videos b
 
 - Node.js 18+ and npm
 - Telegram Bot Token (from [@BotFather](https://t.me/botfather))
-- OpenAI API Key
+- OpenAI API Key OR Gemini API Key (bot supports both)
 - OpenClaw installed locally
 
 ### Installation
@@ -57,6 +57,9 @@ npm install
 ```bash
 cp .env.example .env
 # Edit .env and add your API keys
+# Required: TELEGRAM_BOT_TOKEN
+# Required: Either OPENAI_API_KEY or GEMINI_API_KEY (or both)
+# The bot will use OpenAI if available, otherwise falls back to Gemini
 ```
 
 4. Build the project:
